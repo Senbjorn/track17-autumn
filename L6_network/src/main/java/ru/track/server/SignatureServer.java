@@ -14,6 +14,7 @@ import java.net.Socket;
 import java.security.Signature;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.SocketHandler;
 
 import static ru.track.server.SignatureUtils.*;
 
@@ -50,27 +51,30 @@ public class SignatureServer {
         sock.shutdownOutput();
     }
 
-    private void handle(@NotNull ServerSocket ssock) {
-        Socket sock = null;
+    private void handle(@NotNull Socket sock) {
+        Socket sockC = null;
         try {
             final byte[] buffer = new byte[4096];
-            sock = ssock.accept();
+            sockC = sock;
             handleImpl(sock, buffer);
         } catch (IOException e) {
-            throw new RuntimeException(e); // may be called from lambda
-        } finally {
-            IOUtils.closeQuietly(sock);
+            throw new RuntimeException(e);
+        } // may be called from lambda
+        finally {
+            IOUtils.closeQuietly(sockC);
         }
     }
 
     public void serve() throws IOException {
         ServerSocket ssock = null;
         try {
-            final ServerSocket ssockFinal = new ServerSocket(port, backlog, bindAddr);
-            ssock = ssockFinal;
+            ssock = new ServerSocket(port, backlog, bindAddr);
+//            final ServerSocket ssockFinal = new ServerSocket(port, backlog, bindAddr);
+//            ssock = ssockFinal;
             //noinspection InfiniteLoopStatement
             while (true) {
-                handle(ssockFinal);
+                final Socket finalSock = ssock.accept();
+                pool.execute(() -> handle(finalSock));
             }
         } finally {
             IOUtils.closeQuietly(ssock);
@@ -78,7 +82,8 @@ public class SignatureServer {
     }
 
     public static void main(String[] args) throws Exception {
-        final SignatureServer server = new SignatureServer(8100, 10, null, null);
+        final ExecutorService pool = Executors.newFixedThreadPool(10);
+        final SignatureServer server = new SignatureServer(8100, 10, null, pool);
         server.serve();
     }
 
