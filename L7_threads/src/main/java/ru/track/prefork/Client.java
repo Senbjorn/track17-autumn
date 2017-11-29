@@ -48,10 +48,17 @@ public class Client {
                 byte[] buffer = new byte[1024];
                 System.out.print("Echo: ");
                 int nRead = input.read(buffer);
-                System.out.print(new String(buffer, 0, nRead));
-//                while (nRead != -1) {
+                if (nRead != -1) {
+                    System.out.print(new String(buffer, 0, nRead));
+
+//              while (nRead != -1) {
 //                    nRead = input.read(buffer);
-//                }
+//              }
+                } else {
+                    System.out.println();
+                    System.out.print("Connection is lost");
+                    break;
+                }
                 System.out.println();
             }
         } catch (IOException e) {

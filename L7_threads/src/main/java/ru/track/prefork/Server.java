@@ -10,6 +10,8 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *
@@ -25,6 +27,7 @@ public class Server {
 
     public void serve() {
         ServerSocket serverSocket = null;
+        AtomicLong id = new AtomicLong();
         try {
             serverSocket = new ServerSocket(port, 10, InetAddress.getByName("localhost"));
         } catch (IOException e) {
@@ -34,31 +37,43 @@ public class Server {
             Socket socket = null;
             try {
                 socket = serverSocket.accept();
-                InputStream input = socket.getInputStream();
-                OutputStream output = socket.getOutputStream();
+                final long clientId = id.getAndIncrement();
+                final Socket clientSocket = socket;
+                String idStr = "ClientId[" + clientId + "]@" + clientSocket.getInetAddress() + ":" + clientSocket.getPort();
+                Thread client = new Thread(() -> {
+                    try {
+                        InputStream input = clientSocket.getInputStream();
+                        OutputStream output = clientSocket.getOutputStream();
 
-                log.info("Client accepted");
-                log.info("reading line");
+                        log.info("Client  accepted.");
+                        log.info("Reading line...");
 
-                String line;
-                byte[] buffer = new byte[1024];
-                int nRead = input.read(buffer);
-                while(nRead != -1) {
-                    line = new String(buffer, 0, nRead);
-                    log.info("line: " + line);
-                    log.info("writing");
-                    output.write(line.getBytes());
-                    output.flush();
-                    nRead = input.read(buffer);
-                }
+                        String line;
+                        byte[] buffer = new byte[1024];
+                        int nRead = 0;
 
+                            nRead = input.read(buffer);
 
+                        while(nRead != -1) {
+                            line = new String(buffer, 0, nRead);
+                            log.info("Line: " + line);
+                            log.info("Writing...");
+                            output.write(line.getBytes());
+                            output.flush();
+                            nRead = input.read(buffer);
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } finally {
+                        IOUtils.closeQuietly(clientSocket);
+                    }
+                    log.info("Connection closed!");
+                });
+                client.setName(idStr);
+                client.start();
             } catch (IOException e) {
                 e.printStackTrace();
-            } finally {
-                IOUtils.closeQuietly(socket);
             }
-            log.info("connection closed!");
         }
     }
 
