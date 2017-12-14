@@ -3,11 +3,16 @@ package ru.track.prefork;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.track.prefork.SQL.SQLConnector;
 
 import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Scanner;
@@ -25,6 +30,7 @@ public class Server {
     private AtomicLong idCounter = new AtomicLong();
     private ConcurrentMap<Long, Worker> activeClients = new ConcurrentHashMap<>();
     private ConcurrentMap<Long, Future<?>> activeClientsTasks = new ConcurrentHashMap<>();
+    private ConcurrentMap<Long, Connection> connections = new ConcurrentHashMap<>();
     private ExecutorService pool = new ThreadPoolExecutor(20, 100,
             60L, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
@@ -48,6 +54,9 @@ public class Server {
             log.error("Host is not valid");
             return;
         }
+        connections.put(0L, SQLConnector.getConnection("tdb-1.trail5.net:"));
+        connections.put(1L, SQLConnector.getConnection("tdb-2.trail5.net:"));
+        connections.put(2L, SQLConnector.getConnection("tdb-3.trail5.net:"));
         Handler handler = new Handler(serverSocket);
         handler.setDaemon(true);
         handler.start();
@@ -84,6 +93,33 @@ public class Server {
         }
     }
 
+    private long baseNumber(String userName) {
+        Matcher m = Pattern.compile("(?<fl>[A-Za-z])").matcher(userName);//FIXME
+        if (m.matches()) {
+            char l = m.group("fl").toLowerCase().charAt(0);
+            log.info("" + l);
+            return (long) ((l - 'a') / 10);
+        }
+        return 0;
+    }
+
+    private void toBase(Message msg) {
+        long n = baseNumber(msg.getAuthor());
+        log.info("" + n);
+//        Connection connection = connections.get(n);
+//        String insert = "INSERT INTO messages (user_name, text, ts) VALUES (?, ?, now())";
+//        PreparedStatement preparedStmt = null;
+//        try {
+//            preparedStmt = connection.prepareStatement(
+//                    insert, Statement.RETURN_GENERATED_KEYS);
+//            preparedStmt.setString(1, msg.getAuthor());
+//            preparedStmt.setString(2, msg.getText());
+//            preparedStmt.execute();
+//        } catch (SQLException e) {
+//            e.printStackTrace();
+//        }
+    }
+
     private void broadcast(Message msg, long id) throws IOException,
             ProtocolException {
         for (Worker w: activeClients.values()) {
@@ -114,9 +150,10 @@ public class Server {
             byte[] buffer = serverByteProtocol.read();
             Message msg = protocol.decode(buffer);
             if (msg.getText().equals("exit")) break;
-            msg = new Message(activeClients.get(id).getName(), msg.getText());
+            msg = new Message(msg.getTime(), activeClients.get(id).getName(), msg.getText());
             log.info(msg.toString());
             log.info("Broadcasting...");
+            toBase(msg);
             broadcast(msg, id);
         }
         log.info("On exit...");
@@ -141,10 +178,11 @@ public class Server {
     class Worker implements Runnable {
 
         private Socket socket;
+        private DefaultUser user;
         private long id;
         private String name = "AnonymousUser";
 
-        public Worker(Socket socket) {
+        public Worker(Socket socket, DefaultUser user) {
             this.socket = socket;
             id = idCounter.getAndIncrement();
         }
@@ -170,7 +208,6 @@ public class Server {
             Thread.currentThread().setName(String.format("Client[%d]@%s:%d", id, socket.getInetAddress(), socket.getPort()));
             try {
                 handleSocket(socket, id);
-
             } catch (IOException e) {
                 log.error(e.getClass().getName() + ": " + e.getMessage());
             } catch (ProtocolException e) {

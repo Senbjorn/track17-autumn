@@ -23,6 +23,12 @@ public class Message implements Serializable {
         this.text = text;
     }
 
+    public Message(long time, String author, String text) {
+        this.text = text;
+        this.time = time;
+        this.author = author;
+    }
+
     @Override
     public String toString() {
         return String.format("Message{time=%d; text=\"%s\"; author=\"%s\"}", time, text, author);
