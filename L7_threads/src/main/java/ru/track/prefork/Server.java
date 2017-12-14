@@ -28,7 +28,7 @@ public class Server {
     private int port;
     private Protocol<Message> protocol;
     private AtomicLong idCounter = new AtomicLong();
-    private ConcurrentMap<Long, Worker> activeClients = new ConcurrentHashMap<>();
+    private ConcurrentMap<Long, DefaultUser> activeClients = new ConcurrentHashMap<>();
     private ConcurrentMap<Long, Future<?>> activeClientsTasks = new ConcurrentHashMap<>();
     private ConcurrentMap<Long, Connection> connections = new ConcurrentHashMap<>();
     private ExecutorService pool = new ThreadPoolExecutor(20, 100,
@@ -78,8 +78,8 @@ public class Server {
                 m.matches();
                 try {
                     Long id = Long.parseLong(m.group("id"));
-                    Worker worker = activeClients.get(id);
-                    if (worker == null) {
+                    DefaultUser user = activeClients.get(id);
+                    if (user == null) {
                         System.out.println("Id does not exist!");
                     } else {
                         removeWorker(id);
@@ -120,12 +120,55 @@ public class Server {
 //        }
     }
 
+    public static void main(String... args) {
+        Server server = new Server(8000, new BinaryProtocol<>());
+        server.serve();
+    }
+
+
+    class Worker implements Runnable {
+
+        private DefaultUser user;
+
+        public Worker(DefaultUser user) {
+            this.user = user;
+        }
+
+        public Socket getSocket() {
+            return user.getSocket();
+        }
+
+        @Override
+        public void run() {
+            Thread.currentThread().setName(
+                    String.format("Client[%d]@%s:%d",
+                    user.getId(),
+                    user.getSocket().getInetAddress(),
+                    user.getSocket().getPort()));
+            try {
+                handleSocket(user.getSocket(), user.getId());
+            } catch (IOException e) {
+                log.error(e.getClass().getName() + ": " + e.getMessage());
+            } catch (ProtocolException e) {
+                log.error(e.getClass().getName() + ": " + e.getMessage());
+            } catch (ServerByteProtocolException e) {
+                log.error(e.getClass().getName() + ": " + e.getMessage());
+            }
+            broadcastQuietly(new Message("Client " + activeClients.get(user.getId()).getName() + " left the server."), user.getId());
+            activeClients.remove(user.getId());
+            activeClientsTasks.remove(user.getId());
+            IOUtils.closeQuietly(getSocket());
+            log.info("Connection closed.");
+        }
+    }
+
+
     private void broadcast(Message msg, long id) throws IOException,
             ProtocolException {
-        for (Worker w: activeClients.values()) {
+        for (DefaultUser user: activeClients.values()) {
             try {
-                if (w.getId() == id) continue;
-                ServerByteProtocol sbp = new ServerIOByteProtocol(w.getSocket());
+                if (user.getId() == id) continue;
+                ServerByteProtocol sbp = new ServerIOByteProtocol(user.getSocket());
                 sbp.write(protocol.encode(msg));
             }
             catch (ServerByteProtocolException e) {}
@@ -159,69 +202,6 @@ public class Server {
         log.info("On exit...");
     }
 
-    private void addWorker(Socket socket) {
-        Worker client = new Worker(socket);
-        activeClients.put(client.getId(), client);
-        activeClientsTasks.put(client.getId(), pool.submit(client));
-    }
-
-    private void removeWorker(long id) {
-        activeClientsTasks.get(id).cancel(true);
-        IOUtils.closeQuietly(activeClients.get(id).getSocket());
-    }
-
-    public static void main(String... args) {
-        Server server = new Server(8000, new BinaryProtocol<>());
-        server.serve();
-    }
-
-    class Worker implements Runnable {
-
-        private Socket socket;
-        private DefaultUser user;
-        private long id;
-        private String name = "AnonymousUser";
-
-        public Worker(Socket socket, DefaultUser user) {
-            this.socket = socket;
-            id = idCounter.getAndIncrement();
-        }
-
-        public Socket getSocket() {
-            return socket;
-        }
-
-        public long getId() {
-            return id;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public void run() {
-            Thread.currentThread().setName(String.format("Client[%d]@%s:%d", id, socket.getInetAddress(), socket.getPort()));
-            try {
-                handleSocket(socket, id);
-            } catch (IOException e) {
-                log.error(e.getClass().getName() + ": " + e.getMessage());
-            } catch (ProtocolException e) {
-                log.error(e.getClass().getName() + ": " + e.getMessage());
-            } catch (ServerByteProtocolException e) {
-                log.error(e.getClass().getName() + ": " + e.getMessage());
-            }
-            broadcastQuietly(new Message("Client " + activeClients.get(id).getName() + " left the server."), id);
-            activeClients.remove(id);
-            activeClientsTasks.remove(id);
-            IOUtils.closeQuietly(getSocket());
-            log.info("Connection closed.");
-        }
-    }
 
     class Handler extends Thread {
 
@@ -232,7 +212,7 @@ public class Server {
         }
 
         public void run() {
-            while (true) {
+            while (!isInterrupted()) {
                 try {
                     Socket socket = serverSocket.accept();
                     log.info("Client accepted");
@@ -242,5 +222,18 @@ public class Server {
                 }
             }
         }
+    }
+
+
+    private void addWorker(Socket socket) {
+        long t = System.currentTimeMillis();
+        DefaultUser client = new DefaultUser(idCounter.getAndIncrement(), t, t, socket, "AnonymousUser");
+        activeClients.put(client.getId(), client);
+        activeClientsTasks.put(client.getId(), pool.submit(new Worker(client)));
+    }
+
+    private void removeWorker(long id) {
+        activeClientsTasks.get(id).cancel(true);
+        IOUtils.closeQuietly(activeClients.get(id).getSocket());
     }
 }
