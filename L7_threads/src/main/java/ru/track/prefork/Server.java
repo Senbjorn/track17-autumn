@@ -10,14 +10,12 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.nio.*;
 
 /**
  *
@@ -27,18 +25,19 @@ public class Server {
     private ServerByteProtocol instance;
     private int port;
     private Protocol<Message> protocol;
-    private AtomicLong idCounter = new AtomicLong();
-    private ConcurrentMap<Long, DefaultUser> activeClients = new ConcurrentHashMap<>();
-    private ConcurrentMap<Long, Future<?>> activeClientsTasks = new ConcurrentHashMap<>();
-    private ConcurrentMap<Long, Connection> connections = new ConcurrentHashMap<>();
-    private ExecutorService pool = new ThreadPoolExecutor(20, 100,
+    final private AtomicLong idCounter = new AtomicLong();
+    final private ConcurrentMap<Long, DefaultUser> activeClients = new ConcurrentHashMap<>();
+    final private ConcurrentMap<Long, Future<?>> activeClientsTasks = new ConcurrentHashMap<>();
+    final private ConcurrentMap<Long, Connection> connections = new ConcurrentHashMap<>();
+    final private ExecutorService pool = new ThreadPoolExecutor(20, 100,
             60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(),
+            new LinkedBlockingQueue<>(2),
             (r) -> {
                 Thread thread = new Thread(r);
                 thread.setDaemon(true);
                 return thread;
-            }
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy()
     );
 
     public Server(int port, Protocol<Message> protocol) {
