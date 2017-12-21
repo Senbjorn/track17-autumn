@@ -9,33 +9,44 @@ import java.util.regex.Pattern;
 public class CommandManager {
 
     private Map<String, Command> commands;
-    private Map<String, CommandHandler> handlers;
     private Pattern commandPattern;
 
     public CommandManager() {
         commands = new HashMap<>();
-        handlers = new HashMap<>();
         commandPattern = Pattern.compile("^(?<name>\\p{Alpha}+)(?<optionLine>.*)$");
     }
 
-    public void handleCommand(String  command) throws CommandManagerException {
+    public CommandInstance paresCommand(String  command) throws CommandManagerException {
         Matcher matcher = commandPattern.matcher(command);
         if (matcher.matches()) {
             String name = matcher.group("name");
             String optionLine = matcher.group("optionLine");
             if (!commands.containsKey(name)) {
-                throw new WrongCommandException("Unavailable command");
+                throw new WrongCommandException("Unknown command");
             }
             Map<String, ?> optMap = commands.get(name).getOptionsList(optionLine);
-            handlers.get(name).handle(commands.get(name), optMap);
+            return new CommandInstance(commands.get(name), optMap);
         } else {
             throw new WrongCommandException("Wrong command syntax");
         }
     }
 
-    public void addCommand(Command c, CommandHandler handler) {
+    public void handleCommand(CommandInstance commandInstance, CommandHandler commandHandler) throws CommandManagerException {
+        commandHandler.handle(commandInstance.getCommand(), commandInstance.getOptMap());
+    }
+
+    public void addCommand(Command c) throws CommandRuntimeException {
+        if (commands.containsKey(c.getCommandName())) {
+            throw new CommandRuntimeException("Command already exists");
+        }
         commands.put(c.getCommandName(), c);
-        handlers.put(c.getCommandName(), handler);
+    }
+
+    public Command getCommand(String name) {
+        if (!commands.containsKey(name)) {
+            throw new CommandRuntimeException("Unknown command");
+        }
+        return commands.get(name);
     }
 
 }

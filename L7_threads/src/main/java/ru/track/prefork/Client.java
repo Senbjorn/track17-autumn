@@ -3,6 +3,9 @@ package ru.track.prefork;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.track.prefork.nioserver.BinaryProtocol;
+import ru.track.prefork.nioserver.Protocol;
+import ru.track.prefork.nioserver.ProtocolException;
 
 import java.io.*;
 import java.net.Socket;
@@ -60,7 +63,7 @@ public class Client {
             String line = scan.nextLine();
             if (Thread.currentThread().isInterrupted()) break;
             log.info("Sending line...");
-            serverByteProtocol.write(protocol.encode(new Message(System.currentTimeMillis(), line)));
+            serverByteProtocol.write(protocol.encode(new Message("Client", line)));
             if (line.equals("exit")) break;
         }
     }

@@ -50,16 +50,15 @@ public class Command {
         return optMap;
     }
 
-    public String generateCommand(Map<String, ?> opt) throws WrongOptionLineException {
+    public String generateCommand(Map<String, ?> opt) throws CommandRuntimeException{
         StringBuilder sb = new StringBuilder();
         sb.append(commandName);
         for (Map.Entry e: options.entrySet()) {
             if (!opt.containsKey(e.getKey()) &&
                     ((CommandOption<?>) e.getValue()).isRequired()) {
-                throw new WrongOptionLineException("Required option is missing: " + e.getKey());
+                throw new CommandRuntimeException("Required option is missing: " + e.getKey());
             }
             if (opt.containsKey(e.getKey())) {
-                Class v = e.getValue().getClass().getTypeParameters()[0].getGenericDeclaration();
                 sb.append(" --").append(e.getKey()).
                         append("=").
                         append(((CommandOption<?>)e.getValue()).getOption(opt.get(e.getKey())));
@@ -68,9 +67,9 @@ public class Command {
         return sb.toString();
     }
 
-    public void addOption(CommandOption<?> option) throws CommandException {
+    public void addOption(CommandOption<?> option) throws CommandRuntimeException {
         if (options.containsKey(option.getOptionName())) {
-            throw new CommandException("Option already exist!");
+            throw new CommandRuntimeException("Option already exists!");
         }
         options.put(option.getOptionName(), option);
     }
@@ -78,4 +77,5 @@ public class Command {
     public String getCommandName() {
         return commandName;
     }
+
 }

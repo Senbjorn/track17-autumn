@@ -1,4 +1,4 @@
-package ru.track.prefork;
+package ru.track.prefork.nioserver;
 
 public class ProtocolException extends Exception {
 

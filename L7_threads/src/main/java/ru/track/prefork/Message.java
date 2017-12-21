@@ -10,6 +10,7 @@ public class Message implements Serializable {
 
     public Message(String text) {
         this.text = text;
+        this.author = "Anonymous";
         time = System.currentTimeMillis();
     }
 
@@ -21,6 +22,7 @@ public class Message implements Serializable {
     public Message(String author, String text) {
         this.author = author;
         this.text = text;
+        time = System.currentTimeMillis();
     }
 
     public Message(long time, String author, String text) {
@@ -44,5 +46,17 @@ public class Message implements Serializable {
 
     public String getAuthor() {
         return author;
+    }
+
+    public void setTime(long time) {
+        this.time = time;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
     }
 }
